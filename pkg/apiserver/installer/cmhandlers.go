@@ -47,7 +47,7 @@ func (ch *CMHandlers) registerResourceHandlers(a *MetricsAPIInstaller, ws *restf
 
 	kind := fqKindToRegister.Kind
 
-	lister := a.group.DynamicStorage.(rest.Lister)
+	lister := a.group.DynamicStorage.(rest.ListerWithOptions)
 	list := lister.NewList()
 	listGVKs, _, err := a.group.Typer.ObjectKinds(list)
 	if err != nil {
@@ -62,6 +62,20 @@ func (ch *CMHandlers) registerResourceHandlers(a *MetricsAPIInstaller, ws *restf
 	versionedListOptions, err := a.group.Creater.New(optionsExternalVersion.WithKind("ListOptions"))
 	if err != nil {
 		return err
+	}
+
+	listOptions, _, _ := lister.NewListOptions()
+	listOptionsInternalKinds, _, err := a.group.Typer.ObjectKinds(listOptions)
+	if err != nil {
+		return err
+	}
+	listOptionsInternalKind := listOptionsInternalKinds[0]
+	versionedListExtraOptions, err := a.group.Creater.New(a.group.GroupVersion.WithKind(listOptionsInternalKind.Kind))
+	if err != nil {
+		versionedListExtraOptions, err = a.group.Creater.New(optionsExternalVersion.WithKind(listOptionsInternalKind.Kind))
+		if err != nil {
+			return err
+		}
 	}
 
 	nameParam := ws.PathParameter("name", "name of the described resource").DataType("string")
@@ -127,7 +141,7 @@ func (ch *CMHandlers) registerResourceHandlers(a *MetricsAPIInstaller, ws *restf
 		},
 	}
 
-	rootScopedHandler := metrics.InstrumentRouteFunc("LIST", "custom-metrics", "", "cluster", restfulListResource(lister, nil, reqScope, false, a.minRequestTimeout))
+	rootScopedHandler := metrics.InstrumentRouteFunc("LIST", "custom-metrics", "", "cluster", restfulListResourceWithOptions(lister, nil, reqScope, false, a.minRequestTimeout))
 
 	// install the root-scoped route
 	rootScopedRoute := ws.GET(rootScopedPath).To(rootScopedHandler).
@@ -138,6 +152,9 @@ func (ch *CMHandlers) registerResourceHandlers(a *MetricsAPIInstaller, ws *restf
 		Returns(http.StatusOK, "OK", versionedList).
 		Writes(versionedList)
 	if err := addObjectParams(ws, rootScopedRoute, versionedListOptions); err != nil {
+		return err
+	}
+	if err := addObjectParams(ws, rootScopedRoute, versionedListExtraOptions); err != nil {
 		return err
 	}
 	addParams(rootScopedRoute, rootScopedParams)
@@ -151,7 +168,7 @@ func (ch *CMHandlers) registerResourceHandlers(a *MetricsAPIInstaller, ws *restf
 			SelfLinkPathPrefix: gpath.Join(a.prefix, "namespaces") + "/",
 		},
 	}
-	namespacedHandler := metrics.InstrumentRouteFunc("LIST", "custom-metrics-namespaced", "", "namespace", restfulListResource(lister, nil, reqScope, false, a.minRequestTimeout))
+	namespacedHandler := metrics.InstrumentRouteFunc("LIST", "custom-metrics-namespaced", "", "namespace", restfulListResourceWithOptions(lister, nil, reqScope, false, a.minRequestTimeout))
 	namespacedRoute := ws.GET(namespacedPath).To(namespacedHandler).
 		Doc(doc).
 		Param(ws.QueryParameter("pretty", "If 'true', then the output is pretty printed.")).
@@ -160,6 +177,9 @@ func (ch *CMHandlers) registerResourceHandlers(a *MetricsAPIInstaller, ws *restf
 		Returns(http.StatusOK, "OK", versionedList).
 		Writes(versionedList)
 	if err := addObjectParams(ws, namespacedRoute, versionedListOptions); err != nil {
+		return err
+	}
+	if err := addObjectParams(ws, namespacedRoute, versionedListExtraOptions); err != nil {
 		return err
 	}
 	addParams(namespacedRoute, namespacedParams)
@@ -173,7 +193,7 @@ func (ch *CMHandlers) registerResourceHandlers(a *MetricsAPIInstaller, ws *restf
 			SelfLinkPathPrefix: gpath.Join(a.prefix, "namespaces") + "/",
 		},
 	}
-	namespaceSpecificHandler := metrics.InstrumentRouteFunc("LIST", "custom-metrics-for-namespace", "", "cluster", restfulListResource(lister, nil, reqScope, false, a.minRequestTimeout))
+	namespaceSpecificHandler := metrics.InstrumentRouteFunc("LIST", "custom-metrics-for-namespace", "", "cluster", restfulListResourceWithOptions(lister, nil, reqScope, false, a.minRequestTimeout))
 	namespaceSpecificRoute := ws.GET(namespaceSpecificPath).To(namespaceSpecificHandler).
 		Doc(doc).
 		Param(ws.QueryParameter("pretty", "If 'true', then the output is pretty printed.")).
@@ -182,6 +202,9 @@ func (ch *CMHandlers) registerResourceHandlers(a *MetricsAPIInstaller, ws *restf
 		Returns(http.StatusOK, "OK", versionedList).
 		Writes(versionedList)
 	if err := addObjectParams(ws, namespaceSpecificRoute, versionedListOptions); err != nil {
+		return err
+	}
+	if err := addObjectParams(ws, namespaceSpecificRoute, versionedListExtraOptions); err != nil {
 		return err
 	}
 	addParams(namespaceSpecificRoute, namespaceSpecificParams)
